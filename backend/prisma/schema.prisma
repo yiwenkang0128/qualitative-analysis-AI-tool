@@ -1,0 +1,36 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"  // 修正 1: 标准写法是 prisma-client-js
+  // 修正 2: 删除了 output 行，让它默认生成到 node_modules
+}
+
+datasource db {
+  provider = "postgresql"
+  // 这里保留你之前成功的硬编码地址
+  url      = "postgresql://yiwenkang@localhost:5432/anti_displacement_db?schema=public"
+}
+
+// 1. 文档模型
+model Document {
+  id              String         @id @default(uuid())
+  originalName    String
+  serverFilename  String         @unique
+  title           String         @default("Unnamed Chat")
+  fullText        String
+  summary         String?
+  topicsJson      String?
+  createdAt       DateTime       @default(now())
+  chats           ChatHistory[]  
+}
+
+// 2. 聊天记录模型
+model ChatHistory {
+  id              String        @id @default(uuid())
+  documentId      String
+  document        Document      @relation(fields: [documentId], references: [id], onDelete: Cascade)
+  role            String
+  content         String
+  createdAt       DateTime      @default(now())
+}
