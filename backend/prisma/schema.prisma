@@ -1,55 +1,41 @@
-// This is the final schema structure for your Anti-Displacement Reader project.
-
 generator client {
   provider = "prisma-client-js"
-  // 🚨 关键修正：必须删除 output = "../generated/prisma" 这一行！
 }
 
 datasource db {
   provider = "postgresql"
-  // 请确保这里的用户名和数据库名是正确的
   url      = "postgresql://yiwenkang@localhost:5432/anti_displacement_db?schema=public"
 }
 
-// 1. 用户模型 (新增)
 model User {
   id        String     @id @default(uuid())
   email     String     @unique
   password  String
-  role      String     @default("user") // "admin" 或 "user"
+  role      String     @default("user") 
   createdAt DateTime   @default(now())
-  
-  // 关系：一个用户拥有多个文档
   documents Document[] 
 }
 
-// 2. 文档模型 (已修改，关联 User)
 model Document {
   id              String         @id @default(uuid())
   originalName    String
   serverFilename  String         @unique
-  title           String         @default("未命名对话")
+  title           String         @default("Untitled Chat")
   fullText        String
   summary         String?
   topicsJson      String?
   createdAt       DateTime       @default(now())
   
-  // ✨ 关联到用户
   userId          String         
   user            User           @relation(fields: [userId], references: [id], onDelete: Cascade)
 
-  // 关系：一个文档可以有很多条聊天记录
   chats           ChatHistory[]  
 }
 
-// 3. 聊天记录模型
 model ChatHistory {
   id              String        @id @default(uuid())
   documentId      String
-  
-  // 关系：onDelete: Cascade 保证删除文档时聊天记录也被删除
   document        Document      @relation(fields: [documentId], references: [id], onDelete: Cascade)
-  
   role            String
   content         String
   createdAt       DateTime      @default(now())

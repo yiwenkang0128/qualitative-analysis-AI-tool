@@ -6,45 +6,41 @@ import {
   Trash2, ChevronDown, ChevronUp, UserPlus, ShieldAlert 
 } from 'lucide-react';
 
-// 定义超级管理员邮箱
 const ROOT_ADMIN_EMAIL = 'admin@test.com';
 
-// === 子组件：用户文档列表 ===
 function UserDocuments({ userId, onDocumentDelete }) {
   const [docs, setDocs] = useState([]);
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
     setLoading(true);
-    // ✨ 移除 Authorization header，依赖 Cookie
     axios.get(`http://localhost:3001/api/admin/users/${userId}/docs`)
     .then(res => setDocs(res.data))
-    .catch(e => alert("加载用户文档列表失败"))
+    .catch(e => alert("Failed to load user documents"))
     .finally(() => setLoading(false));
   }, [userId]);
 
   const handleDeleteDoc = async (docId) => {
-    if (!confirm("确定要删除此文档吗？用户的聊天记录也将被删除。")) return;
+    if (!confirm("Are you sure you want to delete this document? User chat history will also be deleted.")) return;
     try {
-      // ✨ 移除 Authorization header
       await axios.delete(`http://localhost:3001/api/admin/documents/${docId}`);
       setDocs(prev => prev.filter(d => d.id !== docId));
-      onDocumentDelete(); // 通知父组件更新统计
+      onDocumentDelete();
     } catch (e) {
-      alert("文档删除失败");
+      alert("Failed to delete document");
     }
   };
 
-  if (loading) return <div className="p-4 text-gray-500">加载中...</div>;
+  if (loading) return <div className="p-4 text-gray-500">Loading...</div>;
 
   return (
     <div className="p-4 bg-gray-50 border-t border-gray-100 animate-in slide-in-from-top-2">
       <h4 className="font-bold text-gray-700 mb-3 flex items-center gap-2 text-sm uppercase tracking-wider">
         <FileText className="w-4 h-4"/>
-        该用户上传的文档 ({docs.length})
+        Documents ({docs.length})
       </h4>
       {docs.length === 0 ? (
-        <p className="text-sm text-gray-500 italic">该用户尚未上传任何文档。</p>
+        <p className="text-sm text-gray-500 italic">No documents uploaded yet.</p>
       ) : (
         <ul className="space-y-2">
           {docs.map(doc => (
@@ -57,8 +53,8 @@ function UserDocuments({ userId, onDocumentDelete }) {
               </div>
               <button 
                 onClick={() => handleDeleteDoc(doc.id)} 
-                className="cursor-pointer text-gray-400 hover:text-red-600 p-2 rounded-full hover:bg-red-50 transition-all"
-                title="删除文档"
+                className="text-gray-400 hover:text-red-600 p-2 rounded-full hover:bg-red-50 transition-all"
+                title="Delete Document"
               >
                 <Trash2 className="w-4 h-4" />
               </button>
@@ -70,31 +66,26 @@ function UserDocuments({ userId, onDocumentDelete }) {
   );
 }
 
-// === 主组件：管理员后台 ===
 export default function AdminDashboard() {
   const { user, logout } = useAuth();
   const [users, setUsers] = useState([]);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
-  const [expandedUser, setExpandedUser] = useState(null); // 存 userId 或 'admin-register'
+  const [expandedUser, setExpandedUser] = useState(null);
   
-  // 触发数据刷新的 key
   const [refreshKey, setRefreshKey] = useState(0); 
   
-  // 1. 获取用户列表
   const fetchUsers = async () => {
     setLoading(true);
     try {
-      // ✨ 移除 Authorization header
       const res = await axios.get(`http://localhost:3001/api/admin/users`, {
         params: { search: searchQuery }
       });
       setUsers(res.data);
     } catch (e) {
       console.error(e);
-      // 401/403 会被 AuthContext 拦截，这里只需处理其他错误
       if (e.response?.status !== 401 && e.response?.status !== 403) {
-          alert("加载失败，请检查网络");
+          alert("Load failed, please check network");
       }
     } finally {
       setLoading(false);
@@ -105,124 +96,112 @@ export default function AdminDashboard() {
     fetchUsers();
   }, [searchQuery, refreshKey]);
 
-  // 2. 删除用户
   const handleDeleteUser = async (targetUser) => {
-    // 二次确认文案
     const warningText = targetUser.role === 'admin' 
-        ? "⚠️ 严重警告：你正在删除一个管理员账号！这将永久删除该管理员及其所有数据。" 
-        : "确定要删除此用户吗？该用户所有文档和聊天记录将被永久删除！";
+        ? "⚠️ CRITICAL WARNING: You are deleting an ADMIN account! This will permanently delete the admin and all their data." 
+        : "Are you sure you want to delete this user? All documents and chat history will be permanently deleted!";
 
     if (!confirm(warningText)) return;
 
     try {
-      // ✨ 移除 Authorization header
       await axios.delete(`http://localhost:3001/api/admin/users/${targetUser.id}`);
-      alert("删除成功。");
+      alert("Deleted successfully.");
       setRefreshKey(prev => prev + 1);
       if (expandedUser === targetUser.id) setExpandedUser(null);
     } catch (e) {
-      alert(e.response?.data?.error || "删除失败");
+      alert(e.response?.data?.error || "Deletion failed");
     }
   };
 
-  // 3. 注册新管理员 (仅超级管理员)
   const handleRegisterAdmin = async (email, password) => {
     try {
-      // ✨ 移除 Authorization header
       await axios.post('http://localhost:3001/api/admin/register-admin', { email, password });
-      alert(`新管理员 ${email} 已创建成功！`);
+      alert(`New admin ${email} created successfully!`);
       setRefreshKey(prev => prev + 1);
-      setExpandedUser(null); // 关闭弹窗
+      setExpandedUser(null);
     } catch (e) {
-      alert(e.response?.data?.error || "注册失败，可能是邮箱已存在。");
+      alert(e.response?.data?.error || "Registration failed, email might already exist.");
     }
   };
 
-  // 计算统计数据
   const totalDocs = users.reduce((sum, u) => sum + u._count.documents, 0);
   const adminCount = users.filter(u => u.role === 'admin').length;
-
-  // 判断是否为超级管理员
   const isRootAdmin = user?.email === ROOT_ADMIN_EMAIL;
 
   return (
     <div className="min-h-screen bg-gray-100 p-8 font-sans text-gray-800">
       
-      {/* Header */}
       <header className="flex justify-between items-center mb-8 max-w-7xl mx-auto">
         <h1 className="text-3xl font-bold flex items-center gap-3 text-gray-800">
           <div className="p-2 bg-indigo-600 rounded-lg text-white shadow-lg">
             <LayoutDashboard className="w-6 h-6"/>
           </div>
-          管理员后台
+          Admin Dashboard
         </h1>
         
         <div className="flex items-center gap-4">
-          {/* ✨ 权限控制：只有超级管理员能看到注册按钮 */}
           {isRootAdmin && (
             <button 
                 onClick={() => setExpandedUser('admin-register')}
-                className="flex items-center cursor-pointer gap-2 px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-all shadow-md hover:shadow-lg active:scale-95"
+                className="flex items-center gap-2 px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-all shadow-md hover:shadow-lg active:scale-95"
             >
-                <UserPlus className="w-4 h-4" /> 注册管理员
+                <UserPlus className="w-4 h-4" /> Add Admin
             </button>
           )}
           
           <div className="text-right hidden sm:block">
             <div className="text-sm font-bold text-gray-700">{user?.email}</div>
             <div className="text-xs text-gray-500 uppercase tracking-wide">
-                {isRootAdmin ? '超级管理员' : '普通管理员'}
+                {isRootAdmin ? 'Super Admin' : 'Admin'}
             </div>
           </div>
           
-          <button onClick={logout} className="flex items-center cursor-pointer gap-2 px-4 py-2 bg-white border border-gray-300 rounded-lg hover:bg-red-50 hover:text-red-600 hover:border-red-200 transition-colors shadow-sm">
-            <LogOut className="w-4 h-4" /> <span className="hidden sm:inline">退出</span>
+          <button onClick={logout} className="flex items-center gap-2 px-4 py-2 bg-white border border-gray-300 rounded-lg hover:bg-red-50 hover:text-red-600 hover:border-red-200 transition-colors shadow-sm">
+            <LogOut className="w-4 h-4" /> <span className="hidden sm:inline">Logout</span>
           </button>
         </div>
       </header>
 
-      {/* 注册新管理员 Modal */}
       {expandedUser === 'admin-register' && (
         <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4 animate-in fade-in duration-200">
             <div className="bg-white p-8 rounded-2xl w-full max-w-sm shadow-2xl transform transition-all scale-100">
                 <div className="flex items-center gap-3 mb-6 text-indigo-600">
                     <ShieldAlert className="w-8 h-8" />
-                    <h3 className="text-xl font-bold text-gray-900">新增管理员</h3>
+                    <h3 className="text-xl font-bold text-gray-900">Add New Admin</h3>
                 </div>
                 
                 <div className="space-y-4">
                     <div>
-                        <label className="block text-xs font-bold text-gray-500 uppercase mb-1">邮箱地址</label>
+                        <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Email Address</label>
                         <input id="admin-email" type="email" placeholder="admin@example.com" className="w-full p-3 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-indigo-500 outline-none" />
                     </div>
                     <div>
-                        <label className="block text-xs font-bold text-gray-500 uppercase mb-1">初始密码</label>
-                        <input id="admin-password" type="password" placeholder="至少8位字符" className="w-full p-3 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-indigo-500 outline-none" />
+                        <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Initial Password</label>
+                        <input id="admin-password" type="password" placeholder="At least 8 chars" className="w-full p-3 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-indigo-500 outline-none" />
                     </div>
                 </div>
 
                 <div className="flex justify-end gap-3 mt-8">
-                    <button onClick={() => setExpandedUser(null)} className="px-5 py-2.5 text-gray-600 hover:bg-gray-100 rounded-xl transition-colors">取消</button>
+                    <button onClick={() => setExpandedUser(null)} className="px-5 py-2.5 text-gray-600 hover:bg-gray-100 rounded-xl transition-colors">Cancel</button>
                     <button onClick={() => {
                         const email = document.getElementById('admin-email').value;
                         const password = document.getElementById('admin-password').value;
-                        if(!email || !password) return alert("请填写完整");
+                        if(!email || !password) return alert("Please fill in all fields");
                         handleRegisterAdmin(email, password);
-                    }} className="px-5 py-2.5 bg-indigo-600 text-white rounded-xl hover:bg-indigo-700 shadow-lg transition-all active:scale-95">确认创建</button>
+                    }} className="px-5 py-2.5 bg-indigo-600 text-white rounded-xl hover:bg-indigo-700 shadow-lg transition-all active:scale-95">Create</button>
                 </div>
             </div>
         </div>
       )}
 
       <div className="max-w-7xl mx-auto space-y-8">
-        {/* 统计卡片 */}
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-6">
           <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-200 flex items-center gap-5">
             <div className="p-4 bg-indigo-50 text-indigo-600 rounded-xl">
                 <Users className="w-8 h-8" />
             </div>
             <div>
-                <p className="text-sm text-gray-500 font-medium uppercase">总用户数</p>
+                <p className="text-sm text-gray-500 font-medium uppercase">Total Users</p>
                 <p className="text-3xl font-bold text-gray-900">{users.length}</p>
             </div>
           </div>
@@ -232,7 +211,7 @@ export default function AdminDashboard() {
                 <FileText className="w-8 h-8" />
             </div>
             <div>
-                <p className="text-sm text-gray-500 font-medium uppercase">文档总数</p>
+                <p className="text-sm text-gray-500 font-medium uppercase">Total Docs</p>
                 <p className="text-3xl font-bold text-gray-900">{totalDocs}</p>
             </div>
           </div>
@@ -242,21 +221,20 @@ export default function AdminDashboard() {
                 <ShieldAlert className="w-8 h-8" />
             </div>
             <div>
-                <p className="text-sm text-gray-500 font-medium uppercase">管理员</p>
+                <p className="text-sm text-gray-500 font-medium uppercase">Admins</p>
                 <p className="text-3xl font-bold text-gray-900">{adminCount}</p>
             </div>
           </div>
         </div>
 
-        {/* 用户列表表格 */}
         <div className="bg-white rounded-2xl shadow-xl border border-gray-200 overflow-hidden">
           <div className="p-6 border-b border-gray-100 flex flex-col sm:flex-row justify-between items-center gap-4">
-            <h3 className="font-bold text-xl text-gray-800">用户数据库</h3>
+            <h3 className="font-bold text-xl text-gray-800">User Database</h3>
             <div className="relative w-full sm:w-96">
               <Search className="w-4 h-4 absolute left-3 top-3.5 text-gray-400" />
               <input 
                 type="text" 
-                placeholder="搜索用户邮箱..." 
+                placeholder="Search user email..." 
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 className="w-full pl-10 p-3 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-indigo-500 outline-none transition-all"
@@ -269,16 +247,16 @@ export default function AdminDashboard() {
               <thead className="bg-gray-50/50 text-gray-500 font-bold border-b border-gray-100 uppercase tracking-wider text-xs">
                 <tr>
                   <th className="p-4 w-12"></th>
-                  <th className="p-4">用户邮箱</th>
-                  <th className="p-4">角色权限</th>
-                  <th className="p-4">文档数</th>
-                  <th className="p-4">注册时间</th>
-                  <th className="p-4 text-right">操作</th>
+                  <th className="p-4">Email</th>
+                  <th className="p-4">Role</th>
+                  <th className="p-4">Docs</th>
+                  <th className="p-4">Joined</th>
+                  <th className="p-4 text-right">Action</th>
                 </tr>
               </thead>
               <tbody>
                 {loading ? (
-                  <tr><td colSpan="6" className="text-center p-8 text-gray-400">加载中...</td></tr>
+                  <tr><td colSpan="6" className="text-center p-8 text-gray-400">Loading...</td></tr>
                 ) : (
                   users.map(u => (
                     <React.Fragment key={u.id}>
@@ -286,7 +264,7 @@ export default function AdminDashboard() {
                         <td className="p-4 text-center">
                           <button 
                             onClick={() => setExpandedUser(expandedUser === u.id ? null : u.id)}
-                            className={`p-1.5 cursor-pointer rounded-lg transition-colors ${expandedUser === u.id ? 'bg-indigo-100 text-indigo-600' : 'text-gray-400 hover:bg-gray-100 hover:text-gray-600'}`}
+                            className={`p-1.5 rounded-lg transition-colors ${expandedUser === u.id ? 'bg-indigo-100 text-indigo-600' : 'text-gray-400 hover:bg-gray-100 hover:text-gray-600'}`}
                           >
                             {expandedUser === u.id ? <ChevronUp className="w-4 h-4"/> : <ChevronDown className="w-4 h-4"/>}
                           </button>
@@ -304,28 +282,26 @@ export default function AdminDashboard() {
                         <td className="p-4 font-mono">{u._count.documents}</td>
                         <td className="p-4">{new Date(u.createdAt).toLocaleDateString()}</td>
                         <td className="p-4 text-right">
-                          {/* ✨ 权限逻辑：显示删除按钮的条件 */}
                           {(u.role !== 'admin' || (isRootAdmin && u.email !== ROOT_ADMIN_EMAIL)) ? (
                             <button 
                               onClick={() => handleDeleteUser(u)}
-                              className="cursor-pointer text-gray-400 hover:text-red-600 hover:bg-red-50 p-2 rounded-lg transition-all group relative"
+                              className="text-gray-400 hover:text-red-600 hover:bg-red-50 p-2 rounded-lg transition-all group relative"
                             >
                               <Trash2 className="w-5 h-5" />
                               {u.role === 'admin' && (
                                 <span className="absolute bottom-full right-0 mb-2 w-max bg-gray-900 text-white text-xs py-1 px-2 rounded shadow-lg opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none">
-                                  删除管理员
+                                  Delete Admin
                                 </span>
                               )}
                             </button>
                           ) : (
                             <span className="text-gray-300 text-xs italic select-none px-2">
-                              {u.email === ROOT_ADMIN_EMAIL ? 'ROOT' : '无权操作'}
+                              {u.email === ROOT_ADMIN_EMAIL ? 'ROOT' : 'NO PERM'}
                             </span>
                           )}
                         </td>
                       </tr>
                       
-                      {/* 展开的文档列表 */}
                       {expandedUser === u.id && (
                         <tr>
                           <td colSpan="6" className="p-0 border-b border-gray-100">

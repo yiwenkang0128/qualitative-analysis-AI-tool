@@ -3,7 +3,6 @@ import json
 import os
 import re
 
-# 禁用并行以防死锁
 os.environ["TOKENIZERS_PARALLELISM"] = "false"
 
 try:
@@ -13,20 +12,19 @@ try:
     from bertopic import BERTopic
     from sklearn.feature_extraction.text import CountVectorizer
 except Exception as e:
-    print(json.dumps({"error": f"库导入失败: {str(e)}"}))
+    print(json.dumps({"error": f"Library import failed: {str(e)}"}))
     sys.exit(1)
 
 load_dotenv()
 api_key = os.getenv("OPENAI_API_KEY")
 
 if len(sys.argv) < 2:
-    print(json.dumps({"error": "缺少 PDF 文件路径"}))
+    print(json.dumps({"error": "Missing PDF file path"}))
     sys.exit(1)
 
 pdf_path = sys.argv[1]
 base_filename = os.path.basename(pdf_path)
 
-# 1. 文本提取
 def extract_text_from_pdf(path):
     text_list = []
     try:
@@ -47,15 +45,14 @@ def extract_text_from_pdf(path):
 texts = extract_text_from_pdf(pdf_path)
 
 if not texts or len(texts) < 5:
-    print(json.dumps({"error": "PDF 内容太少，无法分析"}))
+    print(json.dumps({"error": "PDF content too short or unreadable"}))
     sys.exit(1)
 
-full_doc_text = "\n".join(texts)[:120000] # 截取全文
+full_doc_text = "\n".join(texts)[:120000]
 
 try:
     client = OpenAI(api_key=api_key)
 
-    # 2. 运行 BERTopic
     vectorizer_model = CountVectorizer(stop_words="english", ngram_range=(1, 2))
     topic_model = BERTopic(
         vectorizer_model=vectorizer_model,
@@ -68,20 +65,19 @@ try:
     topic_info = topic_model.get_topic_info()
     top_topics = topic_info[topic_info['Topic'] != -1].head(5)
     
-    topic_structure_data = "【算法提取的主题线索】:\n"
+    topic_structure_data = "Topic Clues:\n"
     for index, row in top_topics.iterrows():
         topic_structure_data += f"- {row['Name']}\n"
 
-    # 3. 生成综述
     prompt = f"""
-    你是一个文档助手。请根据下方信息生成 JSON。
+    You are a document assistant. Please generate a JSON object based on the information below.
     
-    1. "summary": 100-200字文档综述，语气亲切。
-    2. "topics": 3-5个核心主题数组 (emoji, title, description)。
+    1. "summary": 100-200 words document summary, professional and friendly tone.
+    2. "topics": An array of 3-5 core topics (keys: "emoji", "title", "description").
 
     {topic_structure_data}
-    【文档全文片段】:
-    {full_doc_text[:5000]}... (后略)
+    [Document Snippet]:
+    {full_doc_text[:5000]}...
     """
 
     completion = client.chat.completions.create(
@@ -92,7 +88,6 @@ try:
     
     ai_response = completion.choices[0].message.content
     
-    # 🌟 核心修正：确保返回 fullText 和 serverFilename
     result = json.loads(ai_response)
     result['serverFilename'] = base_filename
     result['fullText'] = full_doc_text 
@@ -101,7 +96,6 @@ try:
 
 except Exception as e:
     import traceback
-    # 打印错误堆栈到 stderr 以便调试
     traceback.print_exc(file=sys.stderr)
     print(json.dumps({"error": str(e)}))
     sys.exit(1)
